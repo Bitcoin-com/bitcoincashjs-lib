@@ -388,25 +388,26 @@ Transaction.prototype.sigHashPreimageBufChunks = function(inIndex, prevOutScript
   let input = this.ins[inIndex]
   let scriptVarIntLen = varuint.encodingLength(prevOutScript.length);
   let preimageChunks = [
-    Buffer.allocUnsafe(4), // version
-    hashPrevouts,          // hashPrevouts
-    hashSequence,          // hashSequence
-    input.hash,            // outpoint tx hash
-    Buffer.allocUnsafe(4), // outpoint vout
+    Buffer.allocUnsafe(4),   // version    
+    Buffer.allocUnsafe(100), // hPhSo (hashPrevouts, hashSequence, outpoint tx hash, outpoint vout)
     Buffer.allocUnsafe(scriptVarIntLen + prevOutScript.length), // scriptCode
     Buffer.allocUnsafe(8), // value
     Buffer.allocUnsafe(4), // nSequence
-    hashOutputs,            
-    Buffer.allocUnsafe(4), // hashType
+    hashOutputs,           // hashOutputs
+    Buffer.allocUnsafe(8), // nLockTime & sighash Type
   ]
 
   preimageChunks[0].writeUInt32LE(this.version, 0);
-  preimageChunks[4].writeUInt32LE(input.index, 0);
-  varuint.encode(prevOutScript.length, preimageChunks[5], 0);
-  prevOutScript.copy(preimageChunks[5], scriptVarIntLen);
-  bufferutils.writeUInt64LE(preimageChunks[6], value, 0);
-  preimageChunks[7].writeUInt32LE(input.sequence, 0);
-  preimageChunks[9].writeUInt32LE(hashType, 0);
+  hashPrevouts.copy(preimageChunks[1], 0);
+  hashSequence.copy(preimageChunks[1], 32);
+  input.hash.copy(preimageChunks[1], 64);
+  preimageChunks[1].writeUInt32LE(input.index, 96);
+  varuint.encode(prevOutScript.length, preimageChunks[2], 0);
+  prevOutScript.copy(preimageChunks[2], scriptVarIntLen);
+  bufferutils.writeUInt64LE(preimageChunks[3], value, 0);
+  preimageChunks[4].writeUInt32LE(input.sequence, 0);
+  preimageChunks[6].writeUInt32LE(this.locktime, 0);
+  preimageChunks[6].writeUInt32LE(hashType, 4);
 
   return preimageChunks;
 }
