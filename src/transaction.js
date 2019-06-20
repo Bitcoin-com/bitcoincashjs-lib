@@ -317,6 +317,105 @@ Transaction.prototype.hashForSignature = function (inIndex, prevOutScript, hashT
   return bcrypto.hash256(buffer)
 }
 
+Transaction.prototype.sigHashPreimageBufChunks = function(inIndex, prevOutScript, value, hashType) {
+  typeforce(types.tuple(types.UInt32, types.Buffer, types.Satoshi, types.UInt32), arguments)
+
+  var tbuffer, toffset
+  function writeSlice (slice) { toffset += slice.copy(tbuffer, toffset) }
+  function writeUInt32 (i) { toffset = tbuffer.writeUInt32LE(i, toffset) }
+  function writeUInt64 (i) { toffset = bufferutils.writeUInt64LE(tbuffer, i, toffset) }
+  function writeVarInt (i) {
+    varuint.encode(i, tbuffer, toffset)
+    toffset += varuint.encode.bytes
+  }
+  function writeVarSlice (slice) { writeVarInt(slice.length); writeSlice(slice) }
+
+  var hashOutputs = ZERO
+  var hashPrevouts = ZERO
+  var hashSequence = ZERO
+
+  if (!(hashType & Transaction.SIGHASH_ANYONECANPAY)) {
+    tbuffer = Buffer.allocUnsafe(36 * this.ins.length)
+    toffset = 0
+
+    this.ins.forEach(function (txIn) {
+      writeSlice(txIn.hash)
+      writeUInt32(txIn.index)
+    })
+
+    hashPrevouts = bcrypto.hash256(tbuffer)
+  }
+
+  if (!(hashType & Transaction.SIGHASH_ANYONECANPAY) &&
+       (hashType & 0x1f) !== Transaction.SIGHASH_SINGLE &&
+       (hashType & 0x1f) !== Transaction.SIGHASH_NONE) {
+    tbuffer = Buffer.allocUnsafe(4 * this.ins.length)
+    toffset = 0
+
+    this.ins.forEach(function (txIn) {
+      writeUInt32(txIn.sequence)
+    })
+
+    hashSequence = bcrypto.hash256(tbuffer)
+  }
+
+  if ((hashType & 0x1f) !== Transaction.SIGHASH_SINGLE &&
+      (hashType & 0x1f) !== Transaction.SIGHASH_NONE) {
+    var txOutsSize = this.outs.reduce(function (sum, output) {
+      return sum + 8 + varSliceSize(output.script)
+    }, 0)
+
+    tbuffer = Buffer.allocUnsafe(txOutsSize)
+    toffset = 0
+
+    this.outs.forEach(function (out) {
+      writeUInt64(out.value)
+      writeVarSlice(out.script)
+    })
+
+    hashOutputs = bcrypto.hash256(tbuffer)
+  } else if ((hashType & 0x1f) === Transaction.SIGHASH_SINGLE && inIndex < this.outs.length) {
+    var output = this.outs[inIndex]
+
+    tbuffer = Buffer.allocUnsafe(8 + varSliceSize(output.script))
+    toffset = 0
+    writeUInt64(output.value)
+    writeVarSlice(output.script)
+
+    hashOutputs = bcrypto.hash256(tbuffer)
+  }
+
+  let input = this.ins[inIndex]
+  let scriptVarIntLen = varuint.encodingLength(prevOutScript.length);
+  let preimageChunks = [
+    Buffer.allocUnsafe(4),   // version    
+    Buffer.allocUnsafe(100), // hPhSo (hashPrevouts, hashSequence, outpoint tx hash, outpoint vout)
+    Buffer.allocUnsafe(scriptVarIntLen + prevOutScript.length), // scriptCode
+    Buffer.allocUnsafe(8), // value
+    Buffer.allocUnsafe(4), // nSequence
+    hashOutputs,           // hashOutputs
+    Buffer.allocUnsafe(8), // nLockTime & sighash Type
+  ]
+
+  preimageChunks[0].writeUInt32LE(this.version, 0);
+  hashPrevouts.copy(preimageChunks[1], 0);
+  hashSequence.copy(preimageChunks[1], 32);
+  input.hash.copy(preimageChunks[1], 64);
+  preimageChunks[1].writeUInt32LE(input.index, 96);
+  varuint.encode(prevOutScript.length, preimageChunks[2], 0);
+  prevOutScript.copy(preimageChunks[2], scriptVarIntLen);
+  bufferutils.writeUInt64LE(preimageChunks[3], value, 0);
+  preimageChunks[4].writeUInt32LE(input.sequence, 0);
+  preimageChunks[6].writeUInt32LE(this.locktime, 0);
+  preimageChunks[6].writeUInt32LE(hashType, 4);
+
+  return preimageChunks;
+}
+
+Transaction.prototype.sigHashPreimageBuf = function(inIndex, prevOutScript, value, hashType) {
+  return Buffer.concat(this.sigHashPreimageBufChunks(inIndex, prevOutScript, value, hashType))
+}
+
 Transaction.prototype.hashForWitnessV0 = function (inIndex, prevOutScript, value, hashType) {
   typeforce(types.tuple(types.UInt32, types.Buffer, types.Satoshi, types.UInt32), arguments)
 
