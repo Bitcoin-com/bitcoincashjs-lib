@@ -28,9 +28,9 @@ function isPushOnly(value) {
 
 function asMinimalOP(buffer) {
   if (buffer.length === 0) return OPS.OP_0;
-  if (buffer.length !== 1) return;
-  if (buffer[0] >= 1 && buffer[0] <= 16) return OP_INT_BASE + buffer[0];
-  if (buffer[0] === 0x81) return OPS.OP_1NEGATE;
+  // if (buffer.length !== 1) return;
+  // if (buffer[0] >= 1 && buffer[0] <= 16) return OP_INT_BASE + buffer[0];
+  // if (buffer[0] === 0x81) return OPS.OP_1NEGATE;
 }
 
 function compile(chunks) {
