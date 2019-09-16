@@ -83,6 +83,65 @@ function compile(chunks) {
   return buffer;
 }
 
+// Alternative implementation of compile2 that will not mangle SLP OP_RETURN
+// Expects an array of Buffers, to be compiled into a binary blob returned
+// as a Buffer. This final blob is ready to used as an output of a Bitcoin
+// Cash transaction.
+function compile2(chunks) {
+  // If the chunks object is a Buffer, return it.
+  if (Buffer.isBuffer(chunks)) return chunks
+
+  // Calculate the final size the buffer should be. Allows error checking in
+  // case compilation goes wonky.
+  var bufferSize = chunks.reduce(function(accum, chunk) {
+    // If the chunk is of type Buffer.
+    if (Buffer.isBuffer(chunk)) {
+      // Return the final complied length this Buffer will take up.
+      return accum + pushdata.encodingLength(chunk.length) + chunk.length
+    }
+
+    // Otherwise the chunk object is an OP code. It will take up 1 byte.
+    return accum + 1
+  }, 0.0)
+
+  // buffer will hold final compiled Buffer.
+  var buffer = Buffer.allocUnsafe(bufferSize)
+  var offset = 0
+
+  // Loop through each element in the chunks Array.
+  chunks.forEach(function(chunk, index) {
+    // If the chunk is a Buffer and not an OP code.
+    if (Buffer.isBuffer(chunk)) {
+      // console.log(" ")
+      // console.log(`index: ${index}`)
+      // console.log(`chunk: ${chunk.toString("hex")}`)
+      // console.log(`original buffer: ${buffer.toString("hex")}`)
+
+      // Calculate the offset for adding this new chunk.
+      offset += pushdata.encode(buffer, chunk.length, offset)
+
+      // Copy the current chunk into the buffer.
+      chunk.copy(buffer, offset)
+
+      // Calculate the new offset.
+      offset += chunk.length
+
+      // The chunk is an OP code and not a Buffer.
+    } else {
+      // Add the 1-byte OP code to the final Buffer output.
+      buffer.writeUInt8(chunk, offset)
+      offset += 1
+    }
+  })
+
+  // If the calculated offset and buffer length don't match, then something
+  // went wrong. Throw an error.
+  if (offset !== buffer.length) throw new Error("Could not decode chunks")
+
+  // Return the final, compiled binary blog as a buffer.
+  return buffer
+}
+
 function decompile(buffer) {
   // TODO: remove me
   if (types.Array(buffer)) return buffer;
@@ -208,6 +267,7 @@ function isCanonicalSignature(buffer) {
 
 module.exports = {
   compile: compile,
+  compile2: compile2,
   decompile: decompile,
   fromASM: fromASM,
   toASM: toASM,
