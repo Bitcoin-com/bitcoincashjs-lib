@@ -1,7 +1,18 @@
 var createHash = require('create-hash')
 
+let ripemd160_str;
+try {
+  ripemd160_str = require('crypto')
+    .getHashes()
+    .includes('rmd160')
+    ? 'rmd160'
+    : 'ripemd160';
+} catch (err) {
+  ripemd160_str = 'rmd160';
+}
+
 function ripemd160 (buffer) {
-  return createHash('rmd160').update(buffer).digest()
+  return createHash(ripemd160_str).update(buffer).digest()
 }
 
 function sha1 (buffer) {
