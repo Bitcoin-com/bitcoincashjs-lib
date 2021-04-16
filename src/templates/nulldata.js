@@ -8,7 +8,7 @@ var OPS = require('bitcoincash-ops')
 function check (script) {
   var buffer = bscript.compile(script)
 
-  return buffer.length > 1 &&
+  return buffer.length >= 1 &&
     buffer[0] === OPS.OP_RETURN
 }
 check.toJSON = function () { return 'null data output' }
